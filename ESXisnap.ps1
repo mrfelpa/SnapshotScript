@@ -1,4 +1,3 @@
-
 param (
     [Parameter(Mandatory = $true)]
     [string]$vCenterServer,
@@ -17,29 +16,31 @@ param (
 
 function Write-Log {
     param (
-        [string]$message
+        [string]$message,
+        [ValidateSet("Info", "Error")]
+        [string]$logLevel = "Info"
     )
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logMessage = "$timestamp - $message"
+    $logMessage = "$timestamp - $logLevel: $message"
     Add-Content -Path $logFilePath -Value $logMessage
 }
 
 function Connect-To-vCenter {
     try {
-        Write-Log "Connecting to vCenter server: $vCenterServer"
+        Write-Log "Connecting to vCenter server: $vCenterServer" -logLevel "Info"
         Connect-VIServer -Server $vCenterServer -User $vCenterUsername -Password $vCenterPassword -ErrorAction Stop
-        Write-Log "Connected to vCenter server successfully."
+        Write-Log "Connected to vCenter server successfully." -logLevel "Info"
     }
     catch {
-        Write-Log "Failed to connect to vCenter server: $_"
+        Write-Log "Failed to connect to vCenter server: $_" -logLevel "Error"
         throw "Failed to connect to vCenter server: $_"
     }
 }
 
 function Disconnect-From-vCenter {
-    Write-Log "Disconnecting from vCenter server: $vCenterServer"
+    Write-Log "Disconnecting from vCenter server: $vCenterServer" -logLevel "Info"
     Disconnect-VIServer -Server $vCenterServer -Confirm:$false
-    Write-Log "Disconnected from vCenter server."
+    Write-Log "Disconnected from vCenter server." -logLevel "Info"
 }
 
 function Get-SnapshotInfo {
@@ -47,13 +48,17 @@ function Get-SnapshotInfo {
         [string]$vmName
     )
     try {
-        Write-Log "Retrieving snapshot information for VM: $vmName"
+        Write-Log "Retrieving snapshot information for VM: $vmName" -logLevel "Info"
+        if ($vmName -eq "") {
+            Write-Log "Invalid VM name. Please provide a valid VM name." -logLevel "Error"
+            return
+        }
         $snapshotInfo = Get-Snapshot -VM $vmName -ErrorAction Stop
-        Write-Log "Snapshot information retrieved successfully."
+        Write-Log "Snapshot information retrieved successfully." -logLevel "Info"
         return $snapshotInfo
     }
     catch {
-        Write-Log "Failed to retrieve snapshot information for VM: $vmName - $_"
+        Write-Log "Failed to retrieve snapshot information for VM: $vmName - $_" -logLevel "Error"
         throw "Failed to retrieve snapshot information for VM: $vmName - $_"
     }
 }
@@ -64,17 +69,21 @@ function Post-To-Xymon {
         [string]$data
     )
     try {
-        Write-Log "Posting data to Xymon server: $xymonServer"
+        Write-Log "Posting data to Xymon server: $xymonServer" -logLevel "Info"
+        if ($hostname -eq "" -or $data -eq "") {
+            Write-Log "Invalid hostname or data. Please provide valid values." -logLevel "Error"
+            return
+        }
         $url = "http://$xymonServer:$xymonPort/$xymonService"
         $postData = @{
             "hostname" = $hostname
             "data" = $data
         }
         Invoke-RestMethod -Uri $url -Method Post -Body $postData -ErrorAction Stop
-        Write-Log "Data posted to Xymon server successfully."
+        Write-Log "Data posted to Xymon server successfully." -logLevel "Info"
     }
     catch {
-        Write-Log "Failed to post data to Xymon server: $_"
+        Write-Log "Failed to post data to Xymon server: $_" -logLevel "Error"
         throw "Failed to post data to Xymon server: $_"
     }
 }
@@ -82,7 +91,7 @@ function Post-To-Xymon {
 try {
     # Connect to vCenter server
     Connect-To-vCenter
-    
+
     $snapshotInfo = Get-SnapshotInfo -vmName $vmName
 
     $snapshotData = ""
@@ -95,10 +104,10 @@ try {
 
     Post-To-Xymon -hostname $vmName -data $snapshotData
 
-    Write-Log "Script execution completed successfully."
+    Write-Log "Script execution completed successfully." -logLevel "Info"
 }
 catch {
-    Write-Log "Error occurred: $_"
+    Write-Log "Error occurred: $_" -logLevel "Error"
 }
 finally {
     if ($global:DefaultVIServers.Count -gt 0) {
